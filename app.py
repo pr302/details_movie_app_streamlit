@@ -80,7 +80,6 @@ def get_movie_data(movie_title: str) -> str:
 
 
 tools = [search_about_movies, get_movie_data]
-llm_with_tools = llm.bind_tools(tools)
 
 # ================================
 # LangGraph State
@@ -91,9 +90,17 @@ class ChatState(TypedDict):
 
 
 def chat_node(state: ChatState):
-    """LLM node that may answer or request a tool call."""
     messages = state["messages"]
-    response = llm_with_tools.invoke(messages)
+    last_user_message = messages[-1].content.lower()
+
+    # 🔍 Simple routing logic
+    if "movie" in last_user_message or "film" in last_user_message:
+        return {
+            "messages": [llm.invoke(messages)],
+            "next": "tools"
+        }
+
+    response = llm.invoke(messages)
     return {"messages": [response]}
 
 
@@ -109,8 +116,9 @@ graph.add_node("chat_node", chat_node)
 graph.add_node("tools", tool_node)
 
 graph.add_edge(START, "chat_node")
-graph.add_conditional_edges("chat_node", tools_condition)
+graph.add_edge("chat_node", "tools")
 graph.add_edge("tools", "chat_node")
+
 
 chatbot = graph.compile(checkpointer=checkpointer)
 
